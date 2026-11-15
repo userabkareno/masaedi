@@ -172,6 +172,7 @@ function beep(){
 /* ============ مزود جوجل (بمفتاح) ============ */
 const API = 'https://generativelanguage.googleapis.com/v1beta/models/';
 function hasKey(){ return !!store.get('key',''); }
+function hasGroqKey(){ return !!store.get('groq_key',''); }
 
 async function rawGenerate(key, model, body){
   const res = await fetch(API+encodeURIComponent(model)+':generateContent', {
@@ -309,6 +310,27 @@ async function freeChat(messages, retryAfterSec){
   if(/^error/i.test(txt.trim())) throw new Error(txt.trim().slice(0,120));
   return parseFreeResponse(txt);
 }
+/* ============ مزود Groq (بمفتاح مجاني، OpenAI-compatible) ============ */
+const GROQ_URL = 'https://api.groq.com/openai/v1/chat/completions';
+async function groqChat(messages, retryAfterSec){
+  const res = await fetch(GROQ_URL, {
+    method:'POST',
+    headers:{'Content-Type':'application/json', 'Authorization':'Bearer '+store.get('groq_key','')},
+    body: JSON.stringify({model:'openai/gpt-oss-120b', messages, tools:FREE_TOOLS})
+  });
+  if(res.status===429){
+    const ra = parseFloat(res.headers.get('retry-after')) || 20;
+    const wait = Math.min(Math.ceil(ra)+2, 60);
+    if((retryAfterSec||0) + wait > 120) throw new Error('الخدمة عليها ضغط دلوقتي، جربي بعد دقيقة');
+    setTyping('ضغط مؤقت، مستنية '+wait+' ثانية…');
+    await new Promise(r=>setTimeout(r, wait*1000));
+    return groqChat(messages, (retryAfterSec||0)+wait);
+  }
+  if(res.status===401 || res.status===403){ const err = new Error('مفتاح Groq مش شغال'); err.status = res.status; throw err; }
+  const txt = await res.text();
+  if(!res.ok) throw new Error('خطأ '+res.status);
+  return parseFreeResponse(txt);
+}
 // صياغة محلية فورية لنتيجة الأداة — من غير مكالمة ثانية للمزود
 function renderToolResult(name, args, out){
   args = args||{}; out = out||{};
@@ -339,12 +361,13 @@ function renderToolResult(name, args, out){
     default: return 'تم.';
   }
 }
-async function freeChatRound(chatLog, userText){
+async function freeChatRound(chatLog, userText, chatFn){
+  chatFn = chatFn || freeChat;
   const messages = [{role:'system', content:personaBlock()+'\nنفذ بالأدوات اللي معاك على طول من غير ما تستأذن.'}];
   chatLog.slice(-14).forEach(m=> messages.push({role: m.role==='user'?'user':'assistant', content:m.text}));
   messages.push({role:'user', content:userText});
   setTyping('بيفكر…');
-  const reply = await freeChat(messages);
+  const reply = await chatFn(messages);
   if(reply.text) return reply.text;
   // مكالمة واحدة بس: نفذ وصيغ الرد محليًا فورًا
   const lines = [];
@@ -421,6 +444,8 @@ async function sendUserMessage(text){
       if(att) parts.push({inlineData:{mimeType:att.mime, data:att.data}});
       if(text) parts.push({text});
       reply = await geminiChatRound(chatLog, parts);
+    }else if(hasGroqKey()){
+      reply = await freeChatRound(chatLog, text || 'اتفضل المرفق', groqChat);
     }else{
       reply = await freeChatRound(chatLog, text || 'اتفضل المرفق');
     }
@@ -429,7 +454,9 @@ async function sendUserMessage(text){
   }catch(e){
     setTyping(null);
     if(e.status===400||e.status===401||e.status===403){
-      addMsg('model','مفتاح جوجل مش شغال. جربي تعملي واحد جديد من aistudio.google.com/apikey وحدثيه من الإعدادات، أو شيليه واشتغلي بالوضع الفوري.');
+      addMsg('model', hasGroqKey() && !hasKey()
+        ? 'مفتاح Groq مش شغال. حدثيه من الإعدادات، أو شيليه واشتغلي بالوضع الفوري.'
+        : 'مفتاح جوجل مش شغال. جربي تعملي واحد جديد من aistudio.google.com/apikey وحدثيه من الإعدادات، أو شيليه واشتغلي بالوضع الفوري.');
     }else{
       addMsg('model', e.message && /ضغط|مشغول/.test(e.message) ? e.message : 'حصلت مشكلة في الاتصال. جربي تاني بعد شوية.');
     }
@@ -503,15 +530,17 @@ const panels = {
       `<div class="item"><div class="body">${esc(x)}</div><button data-act="delMem" data-i="${i}">✕</button></div>`).join('') : '<p class="empty">مفيش حاجة محفوظة</p>');
   },
   settings(){
-    const mode = hasKey() ? 'جوجل (بمفتاحك)' : 'فوري مجاني — Pollinations (من غير مفتاح)';
+    const mode = hasKey() ? 'جوجل (بمفتاحك)' : hasGroqKey() ? 'Groq (بمفتاحك)' : 'فوري مجاني — Pollinations (من غير مفتاح)';
     return `<h3>الإعدادات</h3>
       <p class="sub" style="color:var(--muted);font-size:.85rem">الوضع الحالي: ${mode}</p>
       <label class="lbl">اسم المساعد</label>
       <input type="text" id="setName" value="${esc(store.get('name','مساعدي'))}">
       <label class="lbl">مفتاح Gemini (اختياري — ردود أقوى + صور وملفات وبحث)</label>
       <input type="password" id="setKey" value="${esc(store.get('key',''))}" dir="ltr" placeholder="من aistudio.google.com/apikey">
+      <label class="lbl">مفتاح Groq (اختياري — ردود أسرع، نص بس)</label>
+      <input type="password" id="setGroqKey" value="${esc(store.get('groq_key',''))}" dir="ltr" placeholder="من console.groq.com/keys">
       <button class="btn" data-act="saveSettings">احفظ</button>
-      ${hasKey()? '<button class="btn" data-act="clearKey" style="margin-top:8px">شيل المفتاح وارجعي للوضع الفوري</button>':''}
+      ${(hasKey()||hasGroqKey())? '<button class="btn" data-act="clearKey" style="margin-top:8px">شيل المفاتيح وارجعي للوضع الفوري</button>':''}
       <button class="btn" data-act="exportData" style="margin-top:8px">صدّر بياناتي</button>
       <button class="btn" data-act="wipe" style="margin-top:8px;background:var(--danger)">امسح كل حاجة</button>`;
   },
@@ -520,6 +549,7 @@ const panels = {
       <p>مساعد شخصي بيتكلم مصري وبينفّذ: مهام، ملاحظات، تنبيهات، ذاكرة عنك، حسابات، وكتابة بالصوت. ومع مفتاح جوجل: بحث على النت وقراءة صور وملفات.</p>
       <p>الوضع الفوري مجاني بخدمة Pollinations (Myceli.AI، إستونيا)، وفيه حد للسرعة وقت الضغط. كلامك وآخر المحادثة والمعلومات المحفوظة في الذاكرة بتتبعتلهم وللمزود اللي بيشغل النموذج عندهم. سياسيتهم: مفيش تدريب على بياناتك من غير موافقة صريحة، معالجة مؤقتة، كاش حتى 30 يوم، والـ IP بيتسجل مشفر — لكن مزود النموذج النهائي خارج سيطرتهم، فمتشاركيش أسرار في الوضع ده. pollinations.ai/privacy</p>
       <p>مفتاح جوجل مجاني ضمن حدود استخدام يومية، وكلامك بيتبعت لجوجل. في الخطة المجانية جوجل ممكن تستخدم المحتوى لتحسين منتجاتها (ده لا ينطبق على مستخدمي الاتحاد الأوروبي وبريطانيا وسويسرا)، وتنصح رسميًا متبعتش معلومات حساسة أو شخصية. المفتاح بيتخزن على جهازك وبيتبعت لجوجل مع كل طلب. لو موديل عليه ضغط التطبيق بيحاول اللي بعده، ولو كله واقف بيقولك صراحة.</p>
+      <p>وضع Groq بمفتاح مجاني (شركة Groq الأمريكية): كلامك وآخر المحادثة بتتبعت لسيرفراتهم في أمريكا عشان يردوا. شروطهم الرسمية: ممنوع عليهم يدربوا النماذج على المحادثات من غير إذن صريح، والمحادثة مش بتتحفظ عندهم افتراضيًا — ممكن تسجيل مؤقت حتى 30 يوم بس لو في عطل أو اشتباه إساءة، وفيه إعداد Zero Data Retention في حسابك يلغي ده كمان. المفتاح بيتخزن على جهازك وبيتبعت لـ Groq مع كل طلب. console.groq.com/docs/your-data</p>
       <p>المهام والملاحظات والتنبيهات محفوظة على جهازك بس ومش بتتبعت إلا لو طلبتي منه يشوفها. التنبيهات بتشتغل والتطبيق مفتوح.</p>`;
   }
 };
@@ -540,10 +570,11 @@ document.addEventListener('click', ev=>{
   if(act==='saveSettings'){
     store.set('name', $('setName').value.trim()||'مساعدي');
     store.set('key', $('setKey').value.trim());
+    store.set('groq_key', $('setGroqKey').value.trim());
     $('appTitle').textContent = store.get('name','مساعدي');
     openPanel('settings');
   }
-  if(act==='clearKey'){ store.del('key'); store.del('lastgood'); openPanel('settings'); }
+  if(act==='clearKey'){ store.del('key'); store.del('lastgood'); store.del('groq_key'); openPanel('settings'); }
   if(act==='exportData'){
     const data = {tasks:store.get('tasks',[]), notes:store.get('notes',[]), reminders:store.get('reminders',[]), memory:store.get('memory',[])};
     const blob = new Blob([JSON.stringify(data,null,2)], {type:'application/json'});
@@ -566,6 +597,7 @@ async function boot(){
 
   $('setupGo').onclick = async ()=>{
     const k = $('setupKey').value.trim();
+    const gk = ($('setupGroqKey') ? $('setupGroqKey').value.trim() : '');
     store.set('name', $('setupName').value.trim()||'مساعدي');
     if(k){
       if(k.length < 20){ $('setupErr').textContent = 'المفتاح قصير أوي، اتأكدي إنك نسختيه كامل.'; return; }
@@ -575,6 +607,15 @@ async function boot(){
         if(!res.ok) throw new Error('bad');
         store.set('key', k);
       }catch(_){ $('setupErr').textContent = 'المفتاح مش شغال. اتأكدي إنه من aistudio.google.com/apikey — أو ابدئي من غيره بالزرار التاني.'; return; }
+    }
+    if(gk){
+      if(gk.length < 20){ $('setupErr').textContent = 'مفتاح Groq قصير أوي، اتأكدي إنك نسختيه كامل.'; return; }
+      $('setupErr').textContent = 'بنجرب مفتاح Groq…';
+      try{
+        const res = await fetch('https://api.groq.com/openai/v1/models', {headers:{'Authorization':'Bearer '+gk}});
+        if(!res.ok) throw new Error('bad');
+        store.set('groq_key', gk);
+      }catch(_){ $('setupErr').textContent = 'مفتاح Groq مش شغال. اتأكدي إنه من console.groq.com/keys — أو ابدئي من غيره بالزرار التاني.'; return; }
     }
     store.set('started', true);
     $('setup').classList.add('hidden');
@@ -632,4 +673,4 @@ function fire(){
 document.addEventListener('DOMContentLoaded', boot);
 
 /* تصدير للاختبارات */
-if(typeof module !== 'undefined'){ module.exports = {rankModels, safeCalc, findByNumOrText, parseToolCall, modelChain, parseFreeResponse, renderToolResult}; }
+if(typeof module !== 'undefined'){ module.exports = {rankModels, safeCalc, findByNumOrText, parseToolCall, modelChain, parseFreeResponse, renderToolResult, groqChat}; }
