@@ -1,0 +1,103 @@
+:root{
+  --bg:#ffffff; --ink:#111111; --muted:#6b6b6b; --line:#e6e6e6;
+  --bubble-ai:#f3f3f3; --bubble-me:#111111; --bubble-me-ink:#ffffff;
+  --accent:#111111; --accent-ink:#ffffff; --danger:#b00020;
+}
+html[data-theme="dark"]{
+  --bg:#000000; --ink:#f2f2f2; --muted:#9a9a9a; --line:#262626;
+  --bubble-ai:#1a1a1a; --bubble-me:#f2f2f2; --bubble-me-ink:#000000;
+  --accent:#f2f2f2; --accent-ink:#000000; --danger:#ff7a8a;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%}
+body{
+  background:var(--bg); color:var(--ink);
+  font-family:"Segoe UI", Tahoma, "Noto Kufi Arabic", system-ui, sans-serif;
+  font-size:16px; line-height:1.6;
+  -webkit-text-size-adjust:100%;
+}
+.hidden{display:none !important}
+.muted{color:var(--muted); font-size:.9rem}
+.err{color:var(--danger); font-size:.85rem; margin-top:8px; min-height:1.2em}
+
+/* شاشة الإعداد */
+.setup{min-height:100%; display:flex; align-items:center; justify-content:center; padding:20px}
+.setup-card{width:100%; max-width:420px; border:1px solid var(--line); border-radius:16px; padding:28px 22px}
+.setup-card h1{font-size:1.5rem; margin-bottom:10px}
+.lbl{display:block; margin:14px 0 6px; font-size:.9rem; color:var(--muted)}
+input[type=text],input[type=password]{
+  width:100%; padding:10px 12px; border:1px solid var(--line); border-radius:10px;
+  background:var(--bg); color:var(--ink); font:inherit;
+}
+.steps{margin:16px 0; padding-inline-start:20px; color:var(--muted); font-size:.88rem}
+.steps li{margin:4px 0}
+.btn{
+  display:block; width:100%; padding:12px; border:none; border-radius:10px; cursor:pointer;
+  background:var(--accent); color:var(--accent-ink); font:inherit; font-weight:600;
+}
+
+/* الهيكل */
+.app{display:flex; flex-direction:column; height:100dvh; max-width:680px; margin:0 auto}
+.bar{
+  display:flex; align-items:center; gap:8px; padding:10px 12px;
+  border-bottom:1px solid var(--line); position:sticky; top:0; background:var(--bg); z-index:5;
+}
+.title{flex:1; font-weight:700; font-size:1.05rem; text-align:center}
+.icon-btn{
+  border:none; background:none; color:var(--ink); font-size:1.2rem; cursor:pointer;
+  width:38px; height:38px; border-radius:10px; display:inline-flex; align-items:center; justify-content:center;
+}
+.icon-btn:active{background:var(--bubble-ai)}
+.icon-btn svg{width:20px;height:20px;stroke:var(--ink);fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+
+/* الشات */
+.chat{flex:1; overflow-y:auto; padding:14px 12px; display:flex; flex-direction:column; gap:10px}
+.msg{max-width:85%; padding:10px 14px; border-radius:16px; white-space:pre-wrap; word-break:break-word}
+.msg.ai{background:var(--bubble-ai); align-self:flex-start; border-start-start-radius:4px}
+.msg.me{background:var(--bubble-me); color:var(--bubble-me-ink); align-self:flex-end; border-start-end-radius:4px}
+.msg .who{font-size:.72rem; color:var(--muted); margin-bottom:2px}
+.msg.me .who{color:inherit; opacity:.6}
+.msg img.att{max-width:100%; border-radius:10px; margin-top:6px}
+.msg .speak{margin-top:6px; font-size:.78rem; color:var(--muted); background:none;border:none;cursor:pointer;text-decoration:underline}
+.tool-line{font-size:.78rem; color:var(--muted); align-self:flex-start; padding-inline-start:6px}
+.typing{padding:0 16px 6px; color:var(--muted); font-size:.85rem}
+
+/* صندوق الكتابة */
+.composer{
+  display:flex; align-items:flex-end; gap:6px; padding:10px;
+  border-top:1px solid var(--line); background:var(--bg);
+}
+.composer textarea{
+  flex:1; resize:none; max-height:120px; padding:10px 12px; font:inherit;
+  border:1px solid var(--line); border-radius:20px; background:var(--bg); color:var(--ink);
+}
+.icon-btn.send{background:var(--accent); color:var(--accent-ink); border-radius:50%}
+.attach-preview{
+  padding:8px 14px; border-top:1px solid var(--line); display:flex; align-items:center; gap:10px; font-size:.85rem;
+}
+.attach-preview img{height:44px; border-radius:8px}
+.attach-preview button{border:1px solid var(--line); background:none; color:var(--ink); border-radius:8px; padding:2px 10px; cursor:pointer}
+
+/* القائمة */
+.drawer{
+  position:fixed; inset:0; background:var(--bg); z-index:20;
+  display:flex; flex-direction:column; max-width:680px; margin:0 auto;
+}
+.drawer-head{display:flex; align-items:center; justify-content:space-between; padding:12px; border-bottom:1px solid var(--line); font-weight:700}
+.drawer-nav{display:flex; flex-wrap:wrap; gap:6px; padding:10px 12px; border-bottom:1px solid var(--line)}
+.drawer-nav button{
+  border:1px solid var(--line); background:none; color:var(--ink); font:inherit; font-size:.85rem;
+  padding:6px 14px; border-radius:20px; cursor:pointer;
+}
+.drawer-nav button.on{background:var(--accent); color:var(--accent-ink); border-color:var(--accent)}
+.panel{flex:1; overflow-y:auto; padding:14px}
+.item{border:1px solid var(--line); border-radius:12px; padding:10px 12px; margin-bottom:8px; display:flex; gap:8px; align-items:flex-start}
+.item .body{flex:1}
+.item .sub{font-size:.78rem; color:var(--muted)}
+.item button{border:none; background:none; color:var(--muted); cursor:pointer; font-size:1rem}
+.item.done .body{text-decoration:line-through; color:var(--muted)}
+.empty{color:var(--muted); text-align:center; margin-top:30px; font-size:.9rem}
+.panel h3{margin:6px 0 10px}
+.panel p{margin:8px 0; font-size:.92rem}
+.panel .btn{margin-top:14px}
+.link{color:var(--ink)}
