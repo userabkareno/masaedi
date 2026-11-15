@@ -66,11 +66,6 @@ const FN_DECLS = [
   {name:'forget', description:'ينسى معلومة محفوظة عنها', parameters:{type:'OBJECT',properties:{fact:{type:'STRING'}},required:['fact']}},
   {name:'search_web', description:'يدور على النت عن معلومة حالية أو خبر أو سعر (محتاج مفتاح جوجل)', parameters:{type:'OBJECT',properties:{query:{type:'STRING'}},required:['query']}}
 ];
-const TOOLS_DOC = FN_DECLS.map(f=>{
-  const req = (f.parameters.required||[]);
-  const props = Object.keys(f.parameters.properties||{}).map(k=>k+(req.includes(k)?'':'?')).join(', ');
-  return `- ${f.name}(${props}): ${f.description}`;
-}).join('\n');
 
 /* ============ شخصية المساعد ============ */
 function personaBlock(){
@@ -93,17 +88,7 @@ function personaBlock(){
   ].filter(Boolean).join('\n');
 }
 function systemPromptGemini(){ return personaBlock(); }
-function systemPromptFree(){
-  return personaBlock() + '\n\n' + [
-    'عندك الأدوات دي:',
-    TOOLS_DOC,
-    'طريقة استخدام الأداة: رد بـ JSON بس في سطر واحد من غير أي كلمة قبله أو بعده، بالشكل ده:',
-    '{"tool":"اسم_الأداة","args":{...}}',
-    'مثال: {"tool":"add_task","args":{"title":"أذاكر الفيزياء"}}',
-    'بعد ما الأداة تتنفذ هيوصلك رد يبدأ بـ "نتيجة الأداة" — ساعتها كمل ردك للمستخدمة بالمصري العادي من غير JSON.',
-    'لو مش محتاج أداة، رد عادي بالمصري من غير أي JSON.'
-  ].join('\n');
-}
+
 
 /* ============ تنفيذ الأدوات محليًا ============ */
 function safeCalc(expr){
@@ -272,25 +257,44 @@ function parseToolCall(text){
   if(i>=0 && j>i) return tryParse(t.slice(i, j+1));
   return null;
 }
-// المزود المجاني أحيانًا بيرد بنص عادي وأحيانًا بكائن JSON فيه content أو tool_calls — نوحدهم لنص
-function extractFreeText(txt){
-  txt = (txt||'').trim();
-  if(txt.startsWith('{')){
-    try{
-      const o = JSON.parse(txt);
-      if(o.choices && o.choices[0] && o.choices[0].message && typeof o.choices[0].message.content==='string' && o.choices[0].message.content.trim()) return o.choices[0].message.content.trim();
-      if(typeof o.content === 'string' && o.content.trim()) return o.content.trim();
-      if(o.message && typeof o.message.content==='string' && o.message.content.trim()) return o.message.content.trim();
-      const tc = o.tool_calls && o.tool_calls[0];
-      if(tc && tc.function && tc.function.arguments) return tc.function.arguments;
-    }catch(_){}
+// المزود المجاني OpenAI-compatible وبيدعم tool calling أصلي — بنحول وصف الأدوات لصيغته
+const FREE_TOOLS = FN_DECLS.map(f=>({type:'function', function:{
+  name:f.name, description:f.description,
+  parameters:Object.assign({}, f.parameters, {type:String(f.parameters&&f.parameters.type||'object').toLowerCase()})
+}}));
+// توحيد أشكال رد المزود: نص عادي، كائن فيه content، أو tool_calls
+function parseFreeResponse(txt){
+  const t = (txt||'').trim();
+  let o = null;
+  if(t.startsWith('{')){ try{ o = JSON.parse(t); }catch(_){}}
+  if(o){
+    const msg = (o.choices && o.choices[0] && o.choices[0].message) ? o.choices[0].message : o;
+    const tcs = msg.tool_calls || [];
+    const calls = tcs.filter(tc=>tc.function && Tools[tc.function.name]).map(tc=>{
+      let args = {}; try{ args = JSON.parse(tc.function.arguments||'{}'); }catch(_){}
+      return {name:tc.function.name, args};
+    });
+    if(calls.length) return {calls};
+    // ردود بتخفي النص جوه استدعاء وهمي اسمه final
+    const finalTc = tcs.find(tc=>tc.function && /final/i.test(tc.function.name||''));
+    if(finalTc){
+      const a = finalTc.function.arguments || '';
+      const legacy = parseToolCall(a);
+      if(legacy && Tools[legacy.tool]) return {calls:[{name:legacy.tool, args:legacy.args||{}}]};
+      try{ const ao = JSON.parse(a); if(ao && typeof ao.content==='string') return {text:ao.content}; }catch(_){}
+      if(a.trim()) return {text:a};
+    }
+    if(typeof msg.content === 'string' && msg.content.trim()) return {text:msg.content.trim()};
+    if(typeof o.content === 'string' && o.content.trim()) return {text:o.content.trim()};
   }
-  return txt;
+  const legacy = parseToolCall(t);
+  if(legacy && Tools[legacy.tool]) return {calls:[{name:legacy.tool, args:legacy.args||{}}]};
+  return {text:t};
 }
 async function freeChat(messages, retryAfterSec){
   const res = await fetch(FREE_URL, {
     method:'POST', headers:{'Content-Type':'application/json'},
-    body: JSON.stringify({messages, model:'openai', private:true})
+    body: JSON.stringify({messages, model:'openai', private:true, tools:FREE_TOOLS})
   });
   const txt = await res.text();
   const m = txt.match(/Free limit reached: 1 reply every 45 seconds.*?wait (\d+) seconds/i);
@@ -303,10 +307,10 @@ async function freeChat(messages, retryAfterSec){
   }
   if(!res.ok) throw new Error('خطأ '+res.status);
   if(/^error/i.test(txt.trim())) throw new Error(txt.trim().slice(0,120));
-  return extractFreeText(txt);
+  return parseFreeResponse(txt);
 }
 async function freeChatRound(chatLog, userText){
-  const messages = [{role:'system', content:systemPromptFree()}];
+  const messages = [{role:'system', content:personaBlock()+'\nنفذ بالأدوات اللي معاك على طول من غير ما تستأذن.'}];
   chatLog.slice(-14).forEach(m=> messages.push({role: m.role==='user'?'user':'assistant', content:m.text}));
   messages.push({role:'user', content:userText});
   let rounds = 0;
@@ -314,14 +318,15 @@ async function freeChatRound(chatLog, userText){
     rounds++;
     setTyping(rounds>1 ? 'بينفذ…' : 'بيفكر…');
     const reply = await freeChat(messages);
-    messages.push({role:'assistant', content:reply});
-    const call = parseToolCall(reply);
-    if(!call) return reply;
-    addToolLine('بينفذ: '+call.tool);
-    let out;
-    try{ out = await (Tools[call.tool] ? Tools[call.tool](call.args||{}) : {error:'أداة مش معروفة'}); }
-    catch(e){ out = {error:String(e.message||e)}; }
-    messages.push({role:'user', content:'نتيجة الأداة '+call.tool+': '+JSON.stringify(out)});
+    if(reply.text) return reply.text;
+    messages.push({role:'assistant', content:'(بنفذ الأدوات)'});
+    for(const call of reply.calls){
+      addToolLine('بينفذ: '+call.name);
+      let out;
+      try{ out = await Tools[call.name](call.args||{}); }
+      catch(e){ out = {error:String(e.message||e)}; }
+      messages.push({role:'user', content:'نتيجة الأداة '+call.name+': '+JSON.stringify(out)});
+    }
   }
   return 'عملت اللي أقدر عليه. لو في حاجة ناقصة قوليلي.';
 }
@@ -600,4 +605,4 @@ function fire(){
 document.addEventListener('DOMContentLoaded', boot);
 
 /* تصدير للاختبارات */
-if(typeof module !== 'undefined'){ module.exports = {rankModels, safeCalc, findByNumOrText, parseToolCall, modelChain, extractFreeText}; }
+if(typeof module !== 'undefined'){ module.exports = {rankModels, safeCalc, findByNumOrText, parseToolCall, modelChain, parseFreeResponse}; }
