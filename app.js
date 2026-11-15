@@ -309,26 +309,53 @@ async function freeChat(messages, retryAfterSec){
   if(/^error/i.test(txt.trim())) throw new Error(txt.trim().slice(0,120));
   return parseFreeResponse(txt);
 }
+// صياغة محلية فورية لنتيجة الأداة — من غير مكالمة ثانية للمزود
+function renderToolResult(name, args, out){
+  args = args||{}; out = out||{};
+  if(out.error) return String(out.error);
+  switch(name){
+    case 'add_task': return 'سجلتها في المهام: '+args.title;
+    case 'complete_task': return 'خلّصتها: '+out.task;
+    case 'delete_task': return 'اتمسحت من المهام.';
+    case 'list_tasks': {
+      if(!out.tasks) return 'مفيش مهام مسجلة.';
+      const open = out.tasks.filter(t=>!t.done), done = out.tasks.filter(t=>t.done);
+      let s = open.length ? 'المهام المفتوحة:\n'+open.map(t=>t.n+'- '+t.title).join('\n') : 'مفيش مهام مفتوحة.';
+      if(done.length) s += '\nالمخلّصة: '+done.map(t=>t.title).join('، ');
+      return s;
+    }
+    case 'save_note': return 'اتحفظت في الملاحظات: '+args.title;
+    case 'read_note': return out.title+':\n'+out.body;
+    case 'list_notes': return out.notes ? 'الملاحظات المحفوظة:\n'+out.notes.map(n=>n.n+'- '+n.title).join('\n') : 'مفيش ملاحظات.';
+    case 'delete_note': return 'اتمسحت من الملاحظات.';
+    case 'set_reminder': return 'هفكرك: '+args.text+' — '+out.at+' (طالما التطبيق مفتوح).';
+    case 'list_reminders': return out.reminders ? 'التنبيهات الجاية:\n'+out.reminders.map(r=>r.n+'- '+r.text+' ('+r.at+')').join('\n') : 'مفيش تنبيهات.';
+    case 'cancel_reminder': return 'التنبيه اتلغى.';
+    case 'remember': return 'هفتكر: '+args.fact;
+    case 'forget': return 'نسيتها خلاص.';
+    case 'calculate': return '= '+out.result;
+    case 'get_datetime': return out.now;
+    case 'search_web': return out.result || 'ملقيتش إجابة واضحة';
+    default: return 'تم.';
+  }
+}
 async function freeChatRound(chatLog, userText){
   const messages = [{role:'system', content:personaBlock()+'\nنفذ بالأدوات اللي معاك على طول من غير ما تستأذن.'}];
   chatLog.slice(-14).forEach(m=> messages.push({role: m.role==='user'?'user':'assistant', content:m.text}));
   messages.push({role:'user', content:userText});
-  let rounds = 0;
-  while(rounds < 5){
-    rounds++;
-    setTyping(rounds>1 ? 'بينفذ…' : 'بيفكر…');
-    const reply = await freeChat(messages);
-    if(reply.text) return reply.text;
-    messages.push({role:'assistant', content:'(بنفذ الأدوات)'});
-    for(const call of reply.calls){
-      addToolLine('بينفذ: '+call.name);
-      let out;
-      try{ out = await Tools[call.name](call.args||{}); }
-      catch(e){ out = {error:String(e.message||e)}; }
-      messages.push({role:'user', content:'نتيجة الأداة '+call.name+': '+JSON.stringify(out)});
-    }
+  setTyping('بيفكر…');
+  const reply = await freeChat(messages);
+  if(reply.text) return reply.text;
+  // مكالمة واحدة بس: نفذ وصيغ الرد محليًا فورًا
+  const lines = [];
+  for(const call of reply.calls){
+    addToolLine('بينفذ: '+call.name);
+    let out;
+    try{ out = await Tools[call.name](call.args||{}); }
+    catch(e){ out = {error:String(e.message||e)}; }
+    lines.push(renderToolResult(call.name, call.args, out));
   }
-  return 'عملت اللي أقدر عليه. لو في حاجة ناقصة قوليلي.';
+  return lines.join('\n');
 }
 
 /* ============ واجهة الشات ============ */
@@ -605,4 +632,4 @@ function fire(){
 document.addEventListener('DOMContentLoaded', boot);
 
 /* تصدير للاختبارات */
-if(typeof module !== 'undefined'){ module.exports = {rankModels, safeCalc, findByNumOrText, parseToolCall, modelChain, parseFreeResponse}; }
+if(typeof module !== 'undefined'){ module.exports = {rankModels, safeCalc, findByNumOrText, parseToolCall, modelChain, parseFreeResponse, renderToolResult}; }
