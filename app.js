@@ -259,9 +259,19 @@ function parseToolCall(text){
   return null;
 }
 // المزود المجاني OpenAI-compatible وبيدعم tool calling أصلي — بنحول وصف الأدوات لصيغته
+// Groq بيتحقق من الـ schema بصرامة: كل قيم type لازم lowercase حتى المتداخلة
+function lowerTypes(o){
+  if(Array.isArray(o)) return o.map(lowerTypes);
+  if(o && typeof o==='object'){
+    const r = {};
+    for(const k of Object.keys(o)) r[k] = (k==='type' && typeof o[k]==='string') ? o[k].toLowerCase() : lowerTypes(o[k]);
+    return r;
+  }
+  return o;
+}
 const FREE_TOOLS = FN_DECLS.map(f=>({type:'function', function:{
   name:f.name, description:f.description,
-  parameters:Object.assign({}, f.parameters, {type:String(f.parameters&&f.parameters.type||'object').toLowerCase()})
+  parameters:lowerTypes(f.parameters||{type:'object'})
 }}));
 // توحيد أشكال رد المزود: نص عادي، كائن فيه content، أو tool_calls
 function parseFreeResponse(txt){
@@ -673,4 +683,4 @@ function fire(){
 document.addEventListener('DOMContentLoaded', boot);
 
 /* تصدير للاختبارات */
-if(typeof module !== 'undefined'){ module.exports = {rankModels, safeCalc, findByNumOrText, parseToolCall, modelChain, parseFreeResponse, renderToolResult, groqChat}; }
+if(typeof module !== 'undefined'){ module.exports = {rankModels, safeCalc, findByNumOrText, parseToolCall, modelChain, parseFreeResponse, renderToolResult, groqChat, FREE_TOOLS}; }
