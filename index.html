@@ -17,17 +17,18 @@
 <div id="setup" class="setup hidden">
   <div class="setup-card">
     <h1>مساعدي</h1>
-    <p class="muted">مساعد ذكي بيتكلم مصري وبينفّذ مهام حقيقية. شغال بمفتاح جوجل المجاني بتاعك، وبياناتك كلها على جهازك بس.</p>
+    <p class="muted">مساعد ذكي بيتكلم مصري وبينفّذ مهام حقيقية: مهام، ملاحظات، تنبيهات، ذاكرة، حسابات. مهامك وملاحظاتك محفوظة على جهازك بس، وكلام الشات بيتبعت للمزود عشان يرد.</p>
     <label class="lbl">اسم المساعد (اختاري)</label>
     <input id="setupName" type="text" placeholder="مثال: ميشو" autocomplete="off">
-    <label class="lbl">مفتاح Gemini المجاني</label>
+    <button id="setupFree" class="btn">ابدئي فورًا — مجاني من غير مفتاح</button>
+    <label class="lbl" style="margin-top:20px">أو ضيفي مفتاح Gemini المجاني (ردود أقوى + بحث + صور وملفات)</label>
     <input id="setupKey" type="password" placeholder="الصقي المفتاح هنا" autocomplete="off" dir="ltr">
     <ol class="steps">
       <li>افتحي <span dir="ltr">aistudio.google.com/apikey</span></li>
       <li>سجلي بحساب جوجل واعملي مفتاح جديد (مجاني)</li>
-      <li>الصقيه هنا وابدئي</li>
+      <li>الصقيه هنا ودوسي الزرار اللي تحت</li>
     </ol>
-    <button id="setupGo" class="btn">ابدئي</button>
+    <button id="setupGo" class="btn">ابدئي بالمفتاح</button>
     <p id="setupErr" class="err"></p>
   </div>
 </div>
