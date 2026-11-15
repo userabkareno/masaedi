@@ -1,5 +1,7 @@
-/* مساعدي — مساعد شخصي مصري، شغال بمفتاح Gemini المجاني بتاع المستخدمة.
-   كل البيانات على الجهاز (localStorage). مفيش سيرفر ولا طرف تالت. */
+/* مساعدي — مساعد شخصي مصري.
+   وضعين: فوري مجاني من غير مفتاح (مزود عام)، أو أقوى بمفتاح Gemini المجاني بتاع المستخدمة.
+   المهام والملاحظات والتنبيهات والذاكرة والمحادثة محفوظة على الجهاز (localStorage).
+   نص المحادثة بيتبعت للمزود عشان يرد — مفيش سيرفر لينا في النص. */
 'use strict';
 
 /* ============ تخزين ============ */
@@ -9,8 +11,7 @@ const store = {
   del(k){ localStorage.removeItem('oa_'+k); }
 };
 
-/* ============ نماذج مجانية: اكتشاف تلقائي + ترتيب ============ */
-// يرجع أسماء الموديلات المجانية الصالحة للشات مرتبة من الأفضل.
+/* ============ نماذج جوجل المجانية: اكتشاف تلقائي + ترتيب ============ */
 function rankModels(list){
   const bad = /(embed|aqa|bison|gecko|tts|image|imagen|veo|audio|robot|computer-use|vision-)/i;
   const ok = list.filter(m => (m.supportedGenerationMethods||[]).includes('generateContent')
@@ -20,7 +21,7 @@ function rankModels(list){
     let s = 0;
     const nums = n.match(/\d+(\.\d+)?/g); if(nums) s += Math.max(...nums.map(Number))*100;
     if(n.includes('flash')) s += 50;
-    if(n.includes('pro')) s -= 30; // برو أذكى بس حصته المجانية أقل بكتير
+    if(n.includes('pro')) s -= 30;
     if(n.includes('lite')) s -= 20;
     if(n.includes('preview')||n.includes('exp')) s -= 15;
     return s;
@@ -46,31 +47,10 @@ function modelChain(){
   return out;
 }
 
-/* ============ شخصية المساعد ============ */
-function systemPrompt(){
-  const name = store.get('name','مساعدي') || 'مساعدي';
-  const mem = store.get('memory', []);
-  const now = new Date().toLocaleString('ar-EG', {weekday:'long', year:'numeric', month:'long', day:'numeric', hour:'numeric', minute:'2-digit'});
-  return [
-    `انت "${name}" — مساعد شخصي لوحدها، بتتكلم بالعامية المصرية وبتنفذ مهام حقيقية بالأدوات اللي معاك.`,
-    `قواعدك:`,
-    `- ردودك قصيرة ومباشرة، من غير تطبيل ولا كلام حلو فاضي. لو حاجة مش هتعرف تعملها قولها صراحة.`,
-    `- لو طلبت حاجة ليها أداة، نفذ بالأداة على طول من غير ما تستأذن، وبعد التنفيذ قولها اتعمل إيه في سطر.`,
-    `- لو طلبت تحفظ نص، احفظه حرفي زي ما هي كاتباه بالضبط من غير أي تغيير.`,
-    `- لو سألت عن الوقت أو التاريخ استخدم get_datetime. لو عملية حسابية استخدم calculate.`,
-    `- لو سألت عن خبر أو معلومة بتتغير (أسعار، أخبار، مواعيد) استخدم search_web.`,
-    `- لو قالتلك معلومة عنها تستاهل تفتكرها (ذوق، اسم، عادة) استخدم remember.`,
-    `- التنبيهات بتشتغل طالما التطبيق مفتوح بس؛ لو طلبت تنبيه وانت قافل التطبيق مش هيوصل، وضّح ده لو سألت.`,
-    `- ممنوع تدّعي إنك عملت حاجة معملتاش. ممنوع إيموجي إلا لو هي بدأت.`,
-    `دلوقتي: ${now} (توقيت القاهرة).`,
-    mem.length ? `معلومات محفوظة عنها:\n` + mem.map(m=>'- '+m).join('\n') : ''
-  ].filter(Boolean).join('\n');
-}
-
-/* ============ أدوات التنفيذ المحلية ============ */
+/* ============ وصف الأدوات (للوضعين) ============ */
 const FN_DECLS = [
   {name:'get_datetime', description:'يرجع التاريخ والوقت الحاليين', parameters:{type:'OBJECT',properties:{}}},
-  {name:'calculate', description:'عملية حسابية: جمع وطرح وضرب وقسمة وأقواس ونسب', parameters:{type:'OBJECT',properties:{expression:{type:'STRING',description:'مثال: (2500*12)/7'}},required:['expression']}},
+  {name:'calculate', description:'عملية حسابية: جمع وطرح وضرب وقسمة وأقواس', parameters:{type:'OBJECT',properties:{expression:{type:'STRING',description:'مثال: (2500*12)/7'}},required:['expression']}},
   {name:'add_task', description:'يضيف مهمة جديدة لقائمة مهامها', parameters:{type:'OBJECT',properties:{title:{type:'STRING'}},required:['title']}},
   {name:'list_tasks', description:'يرجع كل المهام المفتوحة والمخلصة بأرقامها', parameters:{type:'OBJECT',properties:{}}},
   {name:'complete_task', description:'يخلّص مهمة برقمها أو جزء من اسمها', parameters:{type:'OBJECT',properties:{task:{type:'STRING'}},required:['task']}},
@@ -84,9 +64,48 @@ const FN_DECLS = [
   {name:'cancel_reminder', description:'يلغي تنبيه برقمه أو جزء من نصه', parameters:{type:'OBJECT',properties:{which:{type:'STRING'}},required:['which']}},
   {name:'remember', description:'يحفظ معلومة دائمة عنها (ذوق، اسم، عادة، رقم مهم)', parameters:{type:'OBJECT',properties:{fact:{type:'STRING'}},required:['fact']}},
   {name:'forget', description:'ينسى معلومة محفوظة عنها', parameters:{type:'OBJECT',properties:{fact:{type:'STRING'}},required:['fact']}},
-  {name:'search_web', description:'يدور على النت عن معلومة حالية أو خبر أو سعر', parameters:{type:'OBJECT',properties:{query:{type:'STRING'}},required:['query']}}
+  {name:'search_web', description:'يدور على النت عن معلومة حالية أو خبر أو سعر (محتاج مفتاح جوجل)', parameters:{type:'OBJECT',properties:{query:{type:'STRING'}},required:['query']}}
 ];
+const TOOLS_DOC = FN_DECLS.map(f=>{
+  const req = (f.parameters.required||[]);
+  const props = Object.keys(f.parameters.properties||{}).map(k=>k+(req.includes(k)?'':'?')).join(', ');
+  return `- ${f.name}(${props}): ${f.description}`;
+}).join('\n');
 
+/* ============ شخصية المساعد ============ */
+function personaBlock(){
+  const name = store.get('name','مساعدي') || 'مساعدي';
+  const mem = store.get('memory', []);
+  const now = new Date().toLocaleString('ar-EG', {weekday:'long', year:'numeric', month:'long', day:'numeric', hour:'numeric', minute:'2-digit'});
+  return [
+    `انت "${name}" — مساعد شخصي لوحدها، بتتكلم بالعامية المصرية وبتنفذ مهام حقيقية بالأدوات اللي معاك.`,
+    `قواعدك:`,
+    `- ردودك قصيرة ومباشرة، من غير تطبيل ولا كلام حلو فاضي. لو حاجة مش هتعرف تعملها قولها صراحة.`,
+    `- لو طلبت حاجة ليها أداة، نفذ بالأداة على طول من غير ما تستأذن، وبعد التنفيذ قولها اتعمل إيه في سطر.`,
+    `- لو طلبت تحفظ نص، احفظه حرفي زي ما هي كاتباه بالضبط من غير أي تغيير.`,
+    `- لو سألت عن الوقت أو التاريخ استخدم get_datetime. لو عملية حسابية استخدم calculate.`,
+    `- لو سألت عن خبر أو معلومة بتتغير استخدم search_web لو متاح.`,
+    `- لو قالتلك معلومة عنها تستاهل تفتكرها استخدم remember.`,
+    `- التنبيهات بتشتغل طالما التطبيق مفتوح بس.`,
+    `- ممنوع تدّعي إنك عملت حاجة معملتاش. ممنوع إيموجي إلا لو هي بدأت.`,
+    `دلوقتي: ${now} (توقيت القاهرة).`,
+    mem.length ? `معلومات محفوظة عنها:\n` + mem.map(m=>'- '+m).join('\n') : ''
+  ].filter(Boolean).join('\n');
+}
+function systemPromptGemini(){ return personaBlock(); }
+function systemPromptFree(){
+  return personaBlock() + '\n\n' + [
+    'عندك الأدوات دي:',
+    TOOLS_DOC,
+    'طريقة استخدام الأداة: رد بـ JSON بس في سطر واحد من غير أي كلمة قبله أو بعده، بالشكل ده:',
+    '{"tool":"اسم_الأداة","args":{...}}',
+    'مثال: {"tool":"add_task","args":{"title":"أذاكر الفيزياء"}}',
+    'بعد ما الأداة تتنفذ هيوصلك رد يبدأ بـ "نتيجة الأداة" — ساعتها كمل ردك للمستخدمة بالمصري العادي من غير JSON.',
+    'لو مش محتاج أداة، رد عادي بالمصري من غير أي JSON.'
+  ].join('\n');
+}
+
+/* ============ تنفيذ الأدوات محليًا ============ */
 function safeCalc(expr){
   const e = String(expr).replace(/[٠-٩]/g, d=>'٠١٢٣٤٥٦٧٨٩'.indexOf(d)).replace(/[×✕]/g,'*').replace(/÷/g,'/').replace(/,/g,'');
   if(!/^[\d\s+\-*/().%^]+$/.test(e)) return {error:'صيغة مش مفهومة'};
@@ -96,13 +115,11 @@ function safeCalc(expr){
     return {result: Math.round(val*1e10)/1e10};
   }catch(_){ return {error:'صيغة مش مفهومة'}; }
 }
-
 function findByNumOrText(list, q, label){
   q = String(q||'').trim();
   const n = parseInt(q, 10);
   if(!isNaN(n) && n>=1 && n<=list.length) return list[n-1];
-  const hit = list.find(x => (x[label]||'').includes(q));
-  return hit || null;
+  return list.find(x => (x[label]||'').includes(q)) || null;
 }
 
 const timers = {};
@@ -133,11 +150,9 @@ const Tools = {
   remember(a){ const m = store.get('memory',[]); const f = String(a.fact).trim(); if(!m.includes(f)) m.push(f); store.set('memory',m); return {ok:true}; },
   forget(a){ let m = store.get('memory',[]); const hit = m.find(x=>x.includes(String(a.fact).trim())); if(!hit) return {error:'ملقيتش المعلومة دي'}; m = m.filter(x=>x!==hit); store.set('memory',m); return {ok:true}; },
   async search_web(a){
+    if(!hasKey()) return {error:'البحث على النت محتاج مفتاح جوجل المجاني. من القائمة ← الإعدادات'};
     try{
-      const out = await callGemini({
-        contents:[{role:'user', parts:[{text:'دور ورد عليّ: '+a.query+'\n\nجاوب بالمصري في ٣ أسطر بالمعلومة الحالية، ولو ملقتش حاجة مؤكدة قول كده.'}]}],
-        useSearch:true
-      });
+      const out = await geminiSearch(a.query);
       return {result: out || 'ملقيتش إجابة واضحة'};
     }catch(e){ return {error:'البحث مش متاح دلوقتي ('+e.message+')'}; }
   }
@@ -146,7 +161,7 @@ const Tools = {
 function scheduleReminder(item){
   const delay = item.at - Date.now();
   if(delay < 0) return;
-  if(delay > 2147483647) return; // بعيد قوي — هيتجدول عند الفتح
+  if(delay > 2147483647) return;
   if(timers[item.id]) clearTimeout(timers[item.id]);
   timers[item.id] = setTimeout(()=>fireReminder(item), delay);
 }
@@ -169,8 +184,10 @@ function beep(){
   }catch(_){}
 }
 
-/* ============ مكالمة Gemini ============ */
+/* ============ مزود جوجل (بمفتاح) ============ */
 const API = 'https://generativelanguage.googleapis.com/v1beta/models/';
+function hasKey(){ return !!store.get('key',''); }
+
 async function rawGenerate(key, model, body){
   const res = await fetch(API+encodeURIComponent(model)+':generateContent', {
     method:'POST', headers:{'Content-Type':'application/json','x-goog-api-key':key}, body:JSON.stringify(body)
@@ -182,42 +199,131 @@ async function rawGenerate(key, model, body){
   }
   return res.json();
 }
-// ينادي أول موديل شغال من السلسلة. بيرجع الرد JSON.
 async function callGeminiRaw(body){
   const key = store.get('key','');
   if(!key) throw new Error('مفيش مفتاح');
-  const chain = modelChain();
   let lastErr = null;
-  for(const model of chain){
+  for(const model of modelChain()){
     try{
       const out = await rawGenerate(key, model, body);
       store.set('lastgood', model);
       return out;
     }catch(e){
       lastErr = e;
-      if(e.status===400 && /api key|key not valid|permission/i.test(e.message)) throw e;
       if(e.status===401||e.status===403) throw e;
-      // 404/429/500/503: جرب اللي بعده
+      if(e.status===400 && /api key|key not valid|permission/i.test(e.message)) throw e;
+      // غير كده (ضغط/مش موجود/خطأ سيرفر): جرب اللي بعده
     }
   }
   throw lastErr || new Error('كل النماذج مشغولة دلوقتي');
 }
-// واجهة بسيطة: بترجع نص الرد (مع دعم بحث جوجل لو useSearch)
-async function callGemini({contents, useSearch=false, useFunctions=false}){
-  const body = {contents, generationConfig:{temperature:0.7, maxOutputTokens:2048}};
-  if(useFunctions) body.systemInstruction = {parts:[{text:systemPrompt()}]};
-  if(useFunctions) body.tools = [{functionDeclarations:FN_DECLS}];
-  if(useSearch) body.tools = [{google_search:{}}];
+async function geminiSearch(query){
+  const body = {contents:[{role:'user', parts:[{text:'دور ورد عليّ: '+query+'\n\nجاوب بالمصري في ٣ أسطر بالمعلومة الحالية، ولو ملقتش حاجة مؤكدة قول كده.'}]}],
+    tools:[{google_search:{}}], generationConfig:{temperature:0.4, maxOutputTokens:1024}};
   let data;
-  try{
-    data = await callGeminiRaw(body);
-  }catch(e){
-    if(useSearch){ delete body.tools; data = await callGeminiRaw(body); }
-    else throw e;
-  }
+  try{ data = await callGeminiRaw(body); }
+  catch(e){ delete body.tools; data = await callGeminiRaw(body); }
   const cand = data.candidates && data.candidates[0];
-  if(!cand || !cand.content) throw new Error('مفيش رد');
-  return {cand, text:(cand.content.parts||[]).map(p=>p.text||'').join('').trim()};
+  return cand && cand.content ? (cand.content.parts||[]).map(p=>p.text||'').join('').trim() : '';
+}
+// دورة شات كاملة بموديل جوجل مع function calling أصلي
+async function geminiChatRound(chatLog, userParts){
+  const contents = chatLog.slice(-18).map(m=>({role: m.role==='user'?'user':'model', parts:[{text:m.text}]}));
+  contents.push({role:'user', parts:userParts});
+  let rounds = 0;
+  while(rounds < 6){
+    rounds++;
+    const data = await callGeminiRaw({
+      contents,
+      systemInstruction:{parts:[{text:systemPromptGemini()}]},
+      tools:[{functionDeclarations:FN_DECLS}],
+      generationConfig:{temperature:0.7, maxOutputTokens:2048}
+    });
+    const cand = data.candidates && data.candidates[0];
+    if(!cand || !cand.content) throw new Error('مفيش رد');
+    contents.push(cand.content);
+    const fns = (cand.content.parts||[]).filter(p=>p.functionCall);
+    if(!fns.length){
+      return (cand.content.parts||[]).map(p=>p.text||'').join('').trim() || 'تم.';
+    }
+    const respParts = [];
+    for(const p of fns){
+      const {name, args} = p.functionCall;
+      addToolLine('بينفذ: '+name);
+      let out;
+      try{ out = await (Tools[name] ? Tools[name](args||{}) : {error:'أداة مش معروفة'}); }
+      catch(e){ out = {error:String(e.message||e)}; }
+      respParts.push({functionResponse:{name, response:out}});
+    }
+    contents.push({role:'user', parts:respParts});
+  }
+  return 'عملت اللي أقدر عليه. لو في حاجة ناقصة قوليلي.';
+}
+
+/* ============ الوضع الفوري المجاني (من غير مفتاح) ============ */
+const FREE_URL = 'https://text.pollinations.ai/';
+function parseToolCall(text){
+  if(!text) return null;
+  let t = text.trim().replace(/^```(?:json)?/i,'').replace(/```$/,'').trim();
+  const tryParse = s => { try{ const o = JSON.parse(s); return (o && typeof o.tool==='string') ? o : null; }catch(_){ return null; } };
+  let o = tryParse(t);
+  if(o) return o;
+  const i = t.indexOf('{'), j = t.lastIndexOf('}');
+  if(i>=0 && j>i) return tryParse(t.slice(i, j+1));
+  return null;
+}
+// المزود المجاني أحيانًا بيرد بنص عادي وأحيانًا بكائن JSON فيه content أو tool_calls — نوحدهم لنص
+function extractFreeText(txt){
+  txt = (txt||'').trim();
+  if(txt.startsWith('{')){
+    try{
+      const o = JSON.parse(txt);
+      if(o.choices && o.choices[0] && o.choices[0].message && typeof o.choices[0].message.content==='string' && o.choices[0].message.content.trim()) return o.choices[0].message.content.trim();
+      if(typeof o.content === 'string' && o.content.trim()) return o.content.trim();
+      if(o.message && typeof o.message.content==='string' && o.message.content.trim()) return o.message.content.trim();
+      const tc = o.tool_calls && o.tool_calls[0];
+      if(tc && tc.function && tc.function.arguments) return tc.function.arguments;
+    }catch(_){}
+  }
+  return txt;
+}
+async function freeChat(messages, retryAfterSec){
+  const res = await fetch(FREE_URL, {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({messages, model:'openai', private:true})
+  });
+  const txt = await res.text();
+  const m = txt.match(/Free limit reached: 1 reply every 45 seconds.*?wait (\d+) seconds/i);
+  if(m){
+    const wait = (+m[1] + 2);
+    if((retryAfterSec||0) + wait > 120) throw new Error('الخدمة المجانية عليها ضغط دلوقتي، جربي بعد دقيقة');
+    setTyping('الخدمة المجانية عليها ضغط، مستنية '+wait+' ثانية…');
+    await new Promise(r=>setTimeout(r, wait*1000));
+    return freeChat(messages, (retryAfterSec||0)+wait);
+  }
+  if(!res.ok) throw new Error('خطأ '+res.status);
+  if(/^error/i.test(txt.trim())) throw new Error(txt.trim().slice(0,120));
+  return extractFreeText(txt);
+}
+async function freeChatRound(chatLog, userText){
+  const messages = [{role:'system', content:systemPromptFree()}];
+  chatLog.slice(-14).forEach(m=> messages.push({role: m.role==='user'?'user':'assistant', content:m.text}));
+  messages.push({role:'user', content:userText});
+  let rounds = 0;
+  while(rounds < 5){
+    rounds++;
+    setTyping(rounds>1 ? 'بينفذ…' : 'بيفكر…');
+    const reply = await freeChat(messages);
+    messages.push({role:'assistant', content:reply});
+    const call = parseToolCall(reply);
+    if(!call) return reply;
+    addToolLine('بينفذ: '+call.tool);
+    let out;
+    try{ out = await (Tools[call.tool] ? Tools[call.tool](call.args||{}) : {error:'أداة مش معروفة'}); }
+    catch(e){ out = {error:String(e.message||e)}; }
+    messages.push({role:'user', content:'نتيجة الأداة '+call.tool+': '+JSON.stringify(out)});
+  }
+  return 'عملت اللي أقدر عليه. لو في حاجة ناقصة قوليلي.';
 }
 
 /* ============ واجهة الشات ============ */
@@ -235,18 +341,18 @@ function addMsg(role, text, attDataUrl){
   if(sp) sp.onclick = ()=>speak(text);
   $('chat').appendChild(div);
   $('chat').scrollTop = $('chat').scrollHeight;
-  saveTranscript(role, text);
+  saveTurn(role, text);
 }
 function addToolLine(t){
   const div = document.createElement('div');
   div.className = 'tool-line'; div.textContent = t;
   $('chat').appendChild(div); $('chat').scrollTop = $('chat').scrollHeight;
 }
-function saveTranscript(role, text){
-  const tr = store.get('transcript', []);
-  tr.push({role, text, at:Date.now()});
-  while(tr.length > 300) tr.shift();
-  store.set('transcript', tr);
+function saveTurn(role, text){
+  const log = store.get('chatlog', []);
+  log.push({role, text, at:Date.now()});
+  while(log.length > 100) log.shift();
+  store.set('chatlog', log);
 }
 function speak(text){
   try{
@@ -258,65 +364,44 @@ function speak(text){
     speechSynthesis.speak(u);
   }catch(_){}
 }
+function setTyping(t){ const el=$('typing'); if(!t){el.classList.add('hidden');} else {el.textContent=t; el.classList.remove('hidden');} }
 
-/* ============ دورة الشات مع تنفيذ الأدوات ============ */
-let history = []; // contents بالصيغة بتاعت Gemini
-let pendingAttachment = null; // {mime, data(base64), preview}
+/* ============ إرسال رسالة ============ */
+let pendingAttachment = null; // {mime, data(base64), preview, name}
 
 async function sendUserMessage(text){
-  const parts = [];
-  if(pendingAttachment){
-    parts.push({inlineData:{mimeType:pendingAttachment.mime, data:pendingAttachment.data}});
+  text = (text||'').trim();
+  if(pendingAttachment && !hasKey()){
+    addMsg('model','قراءة الصور والملفات شغالة مع مفتاح جوجل بس دلوقتي. تقدري تضيفيه من القائمة ← الإعدادات، أو ابعتيلي الملف من غير ما تتوقعي إني أقراه.');
+    pendingAttachment = null; renderAttachPreview();
+    if(!text) return;
   }
-  if(text) parts.push({text});
-  if(!parts.length) return;
-  addMsg('user', text || '(مرفق)', pendingAttachment && pendingAttachment.preview);
+  const att = pendingAttachment;
   pendingAttachment = null; renderAttachPreview();
-  $('typing').classList.remove('hidden');
-
-  history.push({role:'user', parts});
-  let rounds = 0;
+  if(!text && !att) return;
+  addMsg('user', text || '(مرفق)', att && att.preview);
+  setTyping('بيفكر…');
+  const chatLog = store.get('chatlog', []).slice(0,-1); // الرسالة اتحفظت فوق
   try{
-    while(rounds < 6){
-      rounds++;
-      const {cand, text:reply} = await callGemini({contents:windowTrim(history), useFunctions:true});
-      history.push(cand.content);
-      const fns = (cand.content.parts||[]).filter(p=>p.functionCall);
-      if(!fns.length){
-        $('typing').classList.add('hidden');
-        if(reply){ addMsg('model', reply); }
-        else { addMsg('model','تم.'); }
-        return;
-      }
-      // نفذ كل أداة وارجع النتيجة
-      const respParts = [];
-      for(const p of fns){
-        const {name, args} = p.functionCall;
-        addToolLine('بينفذ: '+name);
-        let out;
-        try{ out = await (Tools[name] ? Tools[name](args||{}) : {error:'أداة مش معروفة'}); }
-        catch(e){ out = {error:String(e.message||e)}; }
-        respParts.push({functionResponse:{name, response:out}});
-      }
-      history.push({role:'user', parts:respParts});
-    }
-    $('typing').classList.add('hidden');
-    addMsg('model','عملت اللي أقدر عليه. لو في حاجة ناقصة قوليلي.');
-  }catch(e){
-    $('typing').classList.add('hidden');
-    if(e.status===400||e.status===401||e.status===403){
-      addMsg('model','المفتاح مش شغال. اتأكدي إنه متسحوب صح من AI Studio ولو لزم اعملي واحد جديد من الإعدادات.');
+    let reply;
+    if(hasKey()){
+      const parts = [];
+      if(att) parts.push({inlineData:{mimeType:att.mime, data:att.data}});
+      if(text) parts.push({text});
+      reply = await geminiChatRound(chatLog, parts);
     }else{
-      addMsg('model','النماذج المجانية عليها ضغط دلوقتي. جربي تاني بعد دقيقة.');
+      reply = await freeChatRound(chatLog, text || 'اتفضل المرفق');
+    }
+    setTyping(null);
+    addMsg('model', reply);
+  }catch(e){
+    setTyping(null);
+    if(e.status===400||e.status===401||e.status===403){
+      addMsg('model','مفتاح جوجل مش شغال. جربي تعملي واحد جديد من aistudio.google.com/apikey وحدثيه من الإعدادات، أو شيليه واشتغلي بالوضع الفوري.');
+    }else{
+      addMsg('model', e.message && /ضغط|مشغول/.test(e.message) ? e.message : 'حصلت مشكلة في الاتصال. جربي تاني بعد شوية.');
     }
   }
-}
-function windowTrim(h){
-  // ابعت آخر 20 رسالة بس عشان التوفير
-  const w = h.slice(-20);
-  // لو أول رسالة في النافذة functionResponse، شيلها
-  while(w.length && w[0].role==='user' && w[0].parts && w[0].parts[0] && w[0].parts[0].functionResponse) w.shift();
-  return w;
 }
 
 /* ============ المايك ============ */
@@ -349,8 +434,7 @@ function handleFile(file){
   const reader = new FileReader();
   reader.onload = ()=>{
     const url = reader.result;
-    const base64 = url.split(',')[1];
-    pendingAttachment = {mime:file.type||'application/octet-stream', data:base64, name:file.name,
+    pendingAttachment = {mime:file.type||'application/octet-stream', data:url.split(',')[1], name:file.name,
       preview: /^image\//.test(file.type)? url : null};
     renderAttachPreview();
   };
@@ -387,20 +471,24 @@ const panels = {
       `<div class="item"><div class="body">${esc(x)}</div><button data-act="delMem" data-i="${i}">✕</button></div>`).join('') : '<p class="empty">مفيش حاجة محفوظة</p>');
   },
   settings(){
+    const mode = hasKey() ? 'جوجل (بمفتاحك)' : 'فوري مجاني (من غير مفتاح)';
     return `<h3>الإعدادات</h3>
+      <p class="sub" style="color:var(--muted);font-size:.85rem">الوضع الحالي: ${mode}</p>
       <label class="lbl">اسم المساعد</label>
       <input type="text" id="setName" value="${esc(store.get('name','مساعدي'))}">
-      <label class="lbl">مفتاح Gemini</label>
-      <input type="password" id="setKey" value="${esc(store.get('key',''))}" dir="ltr">
+      <label class="lbl">مفتاح Gemini (اختياري — ردود أقوى + صور وملفات وبحث)</label>
+      <input type="password" id="setKey" value="${esc(store.get('key',''))}" dir="ltr" placeholder="من aistudio.google.com/apikey">
       <button class="btn" data-act="saveSettings">احفظ</button>
+      ${hasKey()? '<button class="btn" data-act="clearKey" style="margin-top:8px">شيل المفتاح وارجعي للوضع الفوري</button>':''}
       <button class="btn" data-act="exportData" style="margin-top:8px">صدّر بياناتي</button>
       <button class="btn" data-act="wipe" style="margin-top:8px;background:var(--danger)">امسح كل حاجة</button>`;
   },
   about(){
     return `<h3>عن التطبيق</h3>
-      <p>مساعد شخصي بيتكلم مصري وبينفّذ: مهام، ملاحظات، تنبيهات، حسابات، بحث على النت، قراءة صور وملفات، وكتابة بالصوت.</p>
-      <p>شغال بالنماذج المجانية من جوجل، ولو موديل عليه ضغط بينقل للي بعده لوحده.</p>
-      <p>بياناتك كلها على جهازك بس. التنبيهات بتشتغل والتطبيق مفتوح.</p>`;
+      <p>مساعد شخصي بيتكلم مصري وبينفّذ: مهام، ملاحظات، تنبيهات، ذاكرة عنك، حسابات، وكتابة بالصوت. ومع مفتاح جوجل: بحث على النت وقراءة صور وملفات.</p>
+      <p>الوضع الفوري مجاني من مزود عام، وفيه حد للسرعة (رسالة كل حوالي دقيقة وقت الضغط). مفتاح جوجل مجاني ضمن حدود الاستخدام اليومية، ولو موديل عليه ضغط التطبيق بيحاول اللي بعده، ولو كله واقف بيقولك صراحة.</p>
+      <p>خصوصيتك: مهامك وملاحظاتك وتنبيهاتك ومحادثتك محفوظة على جهازك بس. كلامك في الشات بيتبعت للمزود (أو جوجل) عشان يرد — مفيش سيرفر تالت في النص.</p>
+      <p>التنبيهات بتشتغل والتطبيق مفتوح.</p>`;
   }
 };
 function openPanel(name){
@@ -408,7 +496,7 @@ function openPanel(name){
   document.querySelectorAll('.drawer-nav button').forEach(b=>b.classList.toggle('on', b.dataset.panel===name));
   $('panel').innerHTML = panels[name]();
 }
-$('drawer') && document.addEventListener('click', ev=>{
+document.addEventListener('click', ev=>{
   const b = ev.target.closest('[data-act]');
   if(!b) return;
   const act = b.dataset.act, i = +b.dataset.i;
@@ -423,17 +511,17 @@ $('drawer') && document.addEventListener('click', ev=>{
     $('appTitle').textContent = store.get('name','مساعدي');
     openPanel('settings');
   }
+  if(act==='clearKey'){ store.del('key'); store.del('lastgood'); openPanel('settings'); }
   if(act==='exportData'){
     const data = {tasks:store.get('tasks',[]), notes:store.get('notes',[]), reminders:store.get('reminders',[]), memory:store.get('memory',[])};
     const blob = new Blob([JSON.stringify(data,null,2)], {type:'application/json'});
     const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download='بياناتي.json'; a.click();
   }
-  if(act==='wipe'){ if(confirm('متأكدة؟ كل المهام والملاحظات والذاكرة هيتمسحوا.')){ ['tasks','notes','reminders','memory','transcript','history'].forEach(k=>store.del(k)); location.reload(); } }
+  if(act==='wipe'){ if(confirm('متأكدة؟ كل المهام والملاحظات والذاكرة هيتمسحوا.')){ ['tasks','notes','reminders','memory','chatlog'].forEach(k=>store.del(k)); location.reload(); } }
 });
 
 /* ============ إقلاع ============ */
 async function boot(){
-  // ثيم
   const theme = store.get('theme', matchMedia('(prefers-color-scheme: dark)').matches ? 'dark':'light');
   document.documentElement.dataset.theme = theme;
   $('themeBtn').onclick = ()=>{
@@ -441,36 +529,39 @@ async function boot(){
     document.documentElement.dataset.theme = t; store.set('theme', t);
   };
 
-  const key = store.get('key','');
-  if(!key){ $('setup').classList.remove('hidden'); }
+  if(!store.get('started', false)){ $('setup').classList.remove('hidden'); }
   else { startApp(); }
 
   $('setupGo').onclick = async ()=>{
     const k = $('setupKey').value.trim();
-    if(k.length < 20){ $('setupErr').textContent = 'المفتاح قصير أوي، اتأكدي إنك نسختيه كامل.'; return; }
-    $('setupErr').textContent = 'بنجرب المفتاح…';
-    try{
-      const res = await fetch('https://generativelanguage.googleapis.com/v1beta/models?pageSize=5', {headers:{'x-goog-api-key':k}});
-      if(!res.ok) throw new Error('bad');
-      store.set('key', k);
-      store.set('name', $('setupName').value.trim()||'مساعدي');
-      $('setup').classList.add('hidden');
-      startApp();
-    }catch(_){ $('setupErr').textContent = 'المفتاح مش شغال. اتأكدي إنه من aistudio.google.com/apikey'; }
+    store.set('name', $('setupName').value.trim()||'مساعدي');
+    if(k){
+      if(k.length < 20){ $('setupErr').textContent = 'المفتاح قصير أوي، اتأكدي إنك نسختيه كامل.'; return; }
+      $('setupErr').textContent = 'بنجرب المفتاح…';
+      try{
+        const res = await fetch('https://generativelanguage.googleapis.com/v1beta/models?pageSize=5', {headers:{'x-goog-api-key':k}});
+        if(!res.ok) throw new Error('bad');
+        store.set('key', k);
+      }catch(_){ $('setupErr').textContent = 'المفتاح مش شغال. اتأكدي إنه من aistudio.google.com/apikey — أو ابدئي من غيره بالزرار التاني.'; return; }
+    }
+    store.set('started', true);
+    $('setup').classList.add('hidden');
+    startApp();
+  };
+  $('setupFree').onclick = ()=>{
+    store.set('name', $('setupName').value.trim()||'مساعدي');
+    store.set('started', true);
+    $('setup').classList.add('hidden');
+    startApp();
   };
 }
 function startApp(){
   $('app').classList.remove('hidden');
   $('appTitle').textContent = store.get('name','مساعدي');
-  // رجّع المحادثة القديمة
-  const tr = store.get('transcript', []);
-  tr.slice(-50).forEach(m=>addMsgNoSave(m.role, m.text));
-  history = store.get('history', []);
-  // جدول التنبيهات القديمة
+  const log = store.get('chatlog', []);
+  log.slice(-50).forEach(m=>addMsgNoSave(m.role, m.text));
   store.get('reminders',[]).forEach(scheduleReminder);
-  // اكتشف الموديلات في الخلفية
-  discoverModels(store.get('key','')).catch(()=>{});
-  // إذن الإشعارات
+  if(hasKey()) discoverModels(store.get('key','')).catch(()=>{});
   if('Notification' in window && Notification.permission==='default'){ try{ Notification.requestPermission(); }catch(_){} }
   setupMic();
 
@@ -488,8 +579,9 @@ function startApp(){
   $('drawerClose').onclick = ()=>$('drawer').classList.add('hidden');
   document.querySelectorAll('.drawer-nav button').forEach(b=> b.onclick = ()=>openPanel(b.dataset.panel));
 
-  if(!tr.length){
-    addMsg('model','أهلًا! أنا '+store.get('name','مساعدي')+'. قوليلي عايزة إيه — أقدر أسجل مهام وملاحظات، أفكرك بمعاد، أحسب، أدور على النت، وأقرا صور وملفات.');
+  if(!log.length){
+    addMsg('model','أهلًا! أنا '+store.get('name','مساعدي')+'. قوليلي عايزة إيه — أسجل مهام وملاحظات، أفكرك بمعاد، أحسب، وأفتكر معلومات عنك.'
+      + (hasKey()? ' وأقدر كمان أدور على النت وأقرا صور وملفات.' : ''));
   }
 }
 function addMsgNoSave(role, text){
@@ -504,10 +596,8 @@ function fire(){
   $('input').value = ''; $('input').style.height = 'auto';
   sendUserMessage(t);
 }
-// احفظ history بعد كل رد
-setInterval(()=>store.set('history', history.slice(-40)), 5000);
 
 document.addEventListener('DOMContentLoaded', boot);
 
 /* تصدير للاختبارات */
-if(typeof module !== 'undefined'){ module.exports = {rankModels, safeCalc, findByNumOrText, modelChain}; }
+if(typeof module !== 'undefined'){ module.exports = {rankModels, safeCalc, findByNumOrText, parseToolCall, modelChain, extractFreeText}; }
