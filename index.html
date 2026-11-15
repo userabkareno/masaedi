@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="theme-color" content="#000000">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<title>مساعدي</title>
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<!-- شاشة الإعداد أول مرة -->
+<div id="setup" class="setup hidden">
+  <div class="setup-card">
+    <h1>مساعدي</h1>
+    <p class="muted">مساعد ذكي بيتكلم مصري وبينفّذ مهام حقيقية. شغال بمفتاح جوجل المجاني بتاعك، وبياناتك كلها على جهازك بس.</p>
+    <label class="lbl">اسم المساعد (اختاري)</label>
+    <input id="setupName" type="text" placeholder="مثال: ميشو" autocomplete="off">
+    <label class="lbl">مفتاح Gemini المجاني</label>
+    <input id="setupKey" type="password" placeholder="الصقي المفتاح هنا" autocomplete="off" dir="ltr">
+    <ol class="steps">
+      <li>افتحي <span dir="ltr">aistudio.google.com/apikey</span></li>
+      <li>سجلي بحساب جوجل واعملي مفتاح جديد (مجاني)</li>
+      <li>الصقيه هنا وابدئي</li>
+    </ol>
+    <button id="setupGo" class="btn">ابدئي</button>
+    <p id="setupErr" class="err"></p>
+  </div>
+</div>
+
+<!-- التطبيق -->
+<div id="app" class="app hidden">
+  <header class="bar">
+    <button id="menuBtn" class="icon-btn" aria-label="القائمة">☰</button>
+    <div id="appTitle" class="title">مساعدي</div>
+    <button id="themeBtn" class="icon-btn" aria-label="ليلي/نهاري">◐</button>
+  </header>
+
+  <main id="chat" class="chat"></main>
+  <div id="typing" class="typing hidden">بيفكر…</div>
+
+  <footer class="composer">
+    <button id="attachBtn" class="icon-btn" aria-label="إرفاق">＋</button>
+    <input id="fileInput" type="file" class="hidden" accept="image/*,application/pdf,text/*">
+    <textarea id="input" rows="1" placeholder="اكتبي أو اتكلمي…"></textarea>
+    <button id="micBtn" class="icon-btn" aria-label="صوت"><svg viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg></button>
+    <button id="sendBtn" class="icon-btn send" aria-label="إرسال">↑</button>
+  </footer>
+
+  <div id="attachPreview" class="attach-preview hidden"></div>
+
+  <!-- القائمة الجانبية -->
+  <div id="drawer" class="drawer hidden">
+    <div class="drawer-head">
+      <span id="drawerTitle">القائمة</span>
+      <button id="drawerClose" class="icon-btn">✕</button>
+    </div>
+    <nav class="drawer-nav">
+      <button data-panel="tasks">المهام</button>
+      <button data-panel="notes">الملاحظات</button>
+      <button data-panel="reminders">التنبيهات</button>
+      <button data-panel="memory">الذاكرة</button>
+      <button data-panel="settings">الإعدادات</button>
+      <button data-panel="about">عن التطبيق</button>
+    </nav>
+    <div id="panel" class="panel"></div>
+  </div>
+</div>
+
+<script src="app.js"></script>
+</body>
+</html>
