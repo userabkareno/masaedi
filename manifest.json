@@ -1,0 +1,13 @@
+{
+  "name": "مساعدي",
+  "short_name": "مساعدي",
+  "start_url": ".",
+  "display": "standalone",
+  "dir": "rtl",
+  "lang": "ar",
+  "background_color": "#ffffff",
+  "theme_color": "#000000",
+  "icons": [
+    { "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
+  ]
+}
